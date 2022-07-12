@@ -2,127 +2,240 @@
 
 > This post is a follow-up on [how we index](./part1.md) our data with Algolia.
 
-In this post we'll walk through how to get started with our tiny demo application. The code is available on [github](https://github.com/budavariam/algolia_posts/tree/main/postgres/code).
+In order to let our users access our audit data from an external location we need to send it to a place where they can access it. We're going to walk through the implementation details on how we achieve that.
 
-## Prerequisites
+## Implementation Details
 
-- In order to run the application as we walk through, you need to have docker-compose installed. You can follow their [installation guide](https://docs.docker.com/compose/install/).
-- You need to have an Algolia account with at least free tier.
-- The default postgreSQL exposed port is 25432, it should not be alloacted when starting the app, or the compose file has to be changed.
+Let's dive into our solution in detail. Our demo follows a simple pattern.
 
-## Configure Algolia
+We create new audit log lines periodically with a single producer,
+ and read these new lines with multiple data consumers.
 
-Create a user if you don't have it already at [Algolia](https://www.algolia.com/).
+For the sake of simplicity we've created a minimal example for the services.
 
-You can use their [Quickstart guide](https://www.algolia.com/doc/guides/getting-started/quick-start/#sign-up-for-an-algolia-account) to get started.
+- [Producer](#producer) puts random activity in the database
+- [Consumer](#consumer) reads the queue and uploads the data into Algolia
 
-This demo application was designed to stay below the free tier usage. You can get more info on the limits at Algolia's [pricing page](https://www.algolia.com/pricing/).
+For easier readability, and sticking to the point, I used only the important external libraries, and kept the code as simple as possible.
 
-With the default settings it will add 20 lines on start, and generate one new line every 10 seeconds.
-In the free tier currenlty 10000 lines are free.
-It'd take at least 27 hours to fill up the limits.
+This example does not reflect our real codebase, but gives you an idea of how it can be implemented with minimal overhead.
 
-To set up the Application correctly to your app, you need to go to the [API Keys seection](https://www.algolia.com/account/api-keys/all).
-Take note on the following:
+## Getting started
 
-- Application ID
-- Admin API Key
+Let's go through again what you need to get started as we [did in the earlier post](./part2.md).
 
-> Make sure not to commit these values in any public place, and only use the API Key from the backend.
+All components and depenencies are described in the `docker-compose.yml` file.
 
-## Getting Started with the Code
+- To run the example as intended you have to have [Docker installed](https://docs.docker.com/get-docker/).
+- You need to create a `.env` file based on `.env.example` file
+- You need to register in [Algolia](https://algolia.com) and set up your credentials in the `.env` file.
+- Note that the docker-compose file uses environment variables, it will only work as intended if it's started from the same folder as where the `.env` file is located
 
-### Requirements
-
-The application pack consists of two separate go services and a postgreSQL database.
-It's encapsulated in Docker images, and can be started with docker-compose.
-Moving forward the post will describe how to use the app with Docker.
-
-If you wish to start it with your environment you'll need to have a running postgres, and a [golang environment](https://go.dev/learn/) to build the services.
-
-### Set up .env
-
-Before you start the application, you have to fill some environment variables that the demo environment can use.
-Docker-compose is smart in the way, that it reads a file called `.env` if it's available in the same folder as where it's started. You can read more about this behaviour over [here](https://docs.docker.com/compose/environment-variables/#the-env-file).
-
-The key takeaway is that you need to create a file called `.env` in the same folder as `docker-compose.yml`.
-
-To ease the onboaring you can copy the `.env.example` file and fill out the **...** parts with your data.
-
-The necessary details are:
-
-- `POSTGRES_PASSWORD`: the password to use with the newly started postgreSQL instance
-- `ALGOLIA_APP_ID`: the *Application ID* that you noted from the settings page
-- `ALGOLIA_API_KEY`: the *Admin API Key*
-- `ALGOLIA_INDEX_NAME`: the name of the index that this demo applicaction shall use. If no index exists with the name that you enter it will be created upon first start
-
-### Start the application with Docker-compose
-
-You need to point your terminal to the location of the code and run the following command:
+The example can be started with:
 
 ```bash
-docker-compose up
+docker-compose up --build
 ```
 
-If you make changes in the application code, don't forget to rebuild the applications.
-If you make changes in the service names don't forget to remove orphaned images.
-To handle such cases you can start the app with the following command.
+After start the following should happen.
 
-```bash
-docker-compose up --build --remove-orphans
+1. Postgres container starts
+1. Postgres container initializes the database with mock data
+1. After Postgres container is in a healthy stage, a single producer, and 2 consumers start up
+1. The applications wait and do their job periodically as set in `DELAY_PRODUCER` and `DELAY_CONSUMER` environment variables.
+
+## Component Details
+
+### Postgres Database
+
+We run the [official docker image](https://hub.docker.com/_/postgres) of [postgres](./postgres).
+
+Upon first start it:
+
+1. Creates a db folder (or optionally a volume) in order to persist the database between runs
+1. Runs the init sqls that are inside [docker-entrypoint-initdb.d](./postgres/docker-entrypoint-initdb.d).
+  You can find more info on the init scripts at [dockerhub's postgres image](https://hub.docker.com/_/postgres).
+
+#### Init Scripts
+
+The init scripts run in alphabetical order.
+The first set of sql files (`001_init_audit_log_table.sql` and `002_queue_table.sql`) create the tables that are used by the applications.
+
+1. Create the `app` schema.
+1. Create `app.audit_log` fact table
+1. Create `app.queue_audit_log` queue table
+
+After the tables are ready `003_queue_trigger.sql` creates a trigger to catch the new data inserted into the `app.audit_log` table and replicate it to the `app.queue_audit_log` queue.
+
+```sql
+create or replace function audit_insert_trigger_fnc()
+  returns trigger as $$
+    begin
+        insert into 
+            app.queue_audit_log ( 
+             action
+            ,user_id
+            ,content_item_id
+            ,create_date
+            )
+        values(
+             new."action"
+            ,new."user_id"
+            ,new."content_item_id"
+            ,new."create_date"
+        );
+
+        return new;
+    end;
+$$ language 'plpgsql';
+
+
+create trigger audit_insert_trigger
+  after insert on app.audit_log
+  for each row
+  execute procedure audit_insert_trigger_fnc();
 ```
 
-### Troubleshooting
+When the stucture is ready, and the trigger is in place, the last script (`004_generate_mock_data.sql`) generates random data into the fact table.
+Its configurable parts are extracted into variables, so we can see how it behaves for different amount of data.
+The randomizer has a hard-coded init seed, so it should generate the same data across multiple recreations.
 
-If you follow the instructions above, the demo application *should* start up without any problem.
+```sql
+-- set random seed for repeatable random data generation
+SELECT setseed(0.8);
+DO $$
+    DECLARE
+        -- configurable parameters for data generation
+        nr_lines integer := 20;
+        user_min integer := 10;
+        user_max integer := 20;
+        citm_min integer := 1500;
+        citm_max integer := 2300;
+        actn_min integer := 1;
+        actn_max integer := 3;
+    BEGIN
+        with
+            -- generate user_ids
+            users as (
+                select generate_series(user_min, user_max) as user_id
+            )
+            -- generate content_ids
+           ,content as (
+               select generate_series(citm_min, citm_max) as content_id
+            )
+            -- generate action_ids
+           ,actions as (
+               select generate_series(actn_min, actn_max) as action_id
+            )
+            -- get the cartesian product of the above in a random sort
+           ,limited_data as (
+               select
+                 random() randomizer
+                 ,* 
+               from users, content, actions 
+               order by randomizer
+               limit nr_lines
+            )
+        insert 
+            into app.audit_log (
+                action
+                ,user_id
+                ,content_item_id
+            )
+            select
+                 action_id
+                ,user_id
+                ,content_id
+            from limited_data
+        ;
+END $$
+;
 
-Although I'll list some common errors that might arise.
-
-In case you've started the docker-compose from a different directory, the application will mostly run, but the environment variables might not set up correctly.
-The go services will fail to start, and the postgres image will initialize to the default user.
-The solution is to stop the app with `docker-compose down` create the `.env` file, and remove the postgres volume data folder from `./postgres/db`.
-
-In case of a weird python timeout error shows up upon running docker-compose.
-The docker daemon service is not running, and the docker-compose program can not connect to it to start the demo application.
-
-### Set up Searchable Indices in Algolia
-
-After starting the application a following actions should happen.
-
-The docker-compose log shall show that a db and a single procuder started with multiple consumers.
-The `app.audit_log` table shall have a few auto-generated lines.
-The `app.queue_audit_log` table shall not be empty yet.
-
-After the `$DELAY_CONSUMER` amount of seconds, which is 55 by default, the consumer shall load some data to Algolia. And the values shall appear in the given index set by `$ALGOLIA_INDEX_NAME`.
-
-You can search through these lines in the Algolia Dashboard's Search Explorer part.
-
-In order to find the attributes we've just uploaded you need to make them *searchable*.
-
-If you already have some lines the possible values will be listed in the UI.
-
-You need to add:
-
-- action
-- contentItemId
-- createDateTimestamp
-- userId
-
-You can read more about Searchable Attributes in the [docs](https://www.algolia.com/doc/guides/managing-results/must-do/searchable-attributes/).
-
-### Run Queries in Algolia
-
-After you've added the searchable indices you can find the data that you'd expect.
-
-You can even run custom queries like this:
-
-```json
-{
-  "filters": "createDateTimestamp > 1655127131 AND userId=12 AND action=2"
-}
+-- select * from audit_log order by content_item_id, user_id, action;
 ```
 
-It searches or all actions with an ID:2 by user:12 that were added AFTER 1655127131 (Monday, June 13, 2022 1:32:11 PM).
-The [epochconverter](https://www.epochconverter.com/) is a handy tool to convert between timestamps and date.
+This mock data generation script uses a controlled random data generation by setting the initial random seed at the start of the code with `setseed`.
+We generate a `random()` number for each generated lines, and we can use this to avoid adding similar lines.
 
-> We're going to deep dive into our simplified implementation in the [next part](./part3.md).
+We generate identifiers with `generate_series` between the configurable ranges for each values.
+
+In order to select only the given number of items we add an upper bound of the resultset with `limit`.
+
+To make the code better separated the different logical components are defined in their own [Common Table Expressions](https://www.postgresql.org/docs/current/queries-with.html) aka. CTE-s defined by `with` queries.
+
+In the `limited_data` CTE we join together all generated lines for the different data types and shuffle them before limiting the results.
+
+The official PostgreSQL docker image is written in a way that the database init scripts are only started if it's the first start of the database.
+If you stop the services, and then restart it again, the initialization does not happen again, but the data shall be still there.
+
+### Producer
+
+The code inside `./producer` folder represents our application.
+In our scenario we don't want to modify this code, but leverage the power of Algolia through postgreSQL.
+
+- Connects to the database on start.
+- Periodically generate a single new random log line into the fact table.
+- Out of this application's scope the insert trigger will copy this data into the queue.
+
+This is a straightforward application.
+The `main` function is where the most of the action happens.
+The `db` folder contains a PostgreSQL connector in `db.go`, and an insert statement in `sql.go`.
+
+### Consumer
+
+The consumer services under `./consumer` folder read the last inserted lines from the database and put them into our Algolia index.
+
+Connects to the database on start and then periodically reads the queue for new data and does the following in a transaction:
+
+1. Reads the last `N` lines, then marks them as visited
+1. Uploads the selected lines into Algolia
+1. Clears the visited lines from the queue
+
+We assume that multiple consumers shall be available to adjust to heavy loads if neecessary.
+We can not rely on the fact that these consumers are running at all times, because of this constraint we can not leverage the [notify](https://www.postgresql.org/docs/current/sql-notify.html)/[listen](https://www.postgresql.org/docs/current/sql-listen.html) pattern of postgreSQL. We're using a queue table instead.
+
+The heart of this concept lies in the following SQL query.
+
+```sql
+with get_lines as (
+  select
+      id
+    , action
+    , user_id
+    , content_item_id
+    , create_date
+    , _visited
+  from app.queue_audit_log
+  where _visited = false
+  order by create_date desc
+  limit $1
+  for update skip locked -- add concurent consumers
+)
+update 
+  app.queue_audit_log new
+set _visited = true
+from get_lines old
+where old.id = new.id
+returning 
+    new.id
+  , new.action
+  , new.user_id
+  , new.content_item_id
+  , new.create_date
+  -- , new._visited
+;
+```
+
+Let's separate what this query does into separate steps.
+All theese steps are happening all at once in a single instruction inside a transaction started by our go code.
+
+In order to let our queue table accessed by multiple consumers we need to add `for update skip locked`.
+The `for update` clause lets the engine now that the select subquery will be used for updating them.
+The `skip locked` part will ignore lines that other coonsumers might have locked.
+
+> With SKIP LOCKED, any selected rows that cannot be immediately locked are skipped. Skipping locked rows provides an inconsistent view of the data, so this is not suitable for general purpose work, but can be used to avoid lock contention with multiple consumers accessing a queue-like table. [Sourece](https://www.postgresql.org/docs/current/sql-select.html).
+
+- The `order by create_date desc` makes sure that we get the latest lines from the queue that are available.
+- The `limit $1` line makes sure that we only select a subset of lines from the queue.
+- The `returning` declaration lets us get the data of each seleted line.
+- In the update statement we set the `set _visited = true` only from the lines that are currently unvisited by `where _visited = false`. It's a saffety measure, in theory we shall never have `_visited = true` outside a transaction. This could be further simplified by deleting these lines inside the transaction.

@@ -7,9 +7,10 @@ Managing multiple data sources and dashboards is often a frustrating and time-co
 
 We developed a service to improve the data analysis and presentation process by enabling individuals or teams to curate and collaborate with customized shared workspaces.
 Users can focus on analyzing data and communicating insights without having to shuffle between applications and authenticate multiple times.
+The contents of these reports are still served from the original tools, we provide a unified experience on top of them. Our users can modify the visible name of these reports, add additional tags and other metadata that makes it easier for their teams to organize these reports.
 
-We collect usage data periodicaly that enables us to fine-tune the application based on how our users actually use it.
-In addition to our reports we must comply to security requirements.
+We collect usage data periodically, that enables us to fine-tune the application based on how our users actually use it.
+In addition to collecting these metrics we must comply to security requirements.
 We must be able to tell who was able to access certain reports at a given point in time, what changes were made in the application by whom in a certain time range.
 We collect so called audit logs to be able to extract these information.
 This data must be handled with care and only people with higher privileges shall have access to the actual data.

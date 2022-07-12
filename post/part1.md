@@ -2,29 +2,27 @@
 
 ## Use Case
 
-Data consumers in large organizations often need simultaneous access to multiple BI software and resources to uncover and share insights.
-But whether analyzing or presenting data, managing multiple data sources and dashboards is often a frustrating and time-consuming experience filled with noise that harms the ability to derive insights and leads to fallible decisions.
+Data consumers in large organizations often need simultaneous access to multiple BI software and resources to uncover and share insights. The most popular BI tools that we work with are [Tableau](https://www.tableau.com/) and [PowerBI](https://powerbi.microsoft.com/en-au/). BI tools help communicating, presenting and analyting data with powerful interactive visualizations that can work even with realtime data.
+Managing multiple data sources and dashboards is often a frustrating and time-consuming experience filled with noise that harms the ability to derive insights and leads to fallible decisions.
 
 We developed a service to improve the data analysis and presentation process by enabling individuals or teams to curate and collaborate with customized shared workspaces.
 Users can focus on analyzing data and communicating insights without having to shuffle between applications and authenticate multiple times.
 
-In order to speed up the users workdays even more, we're enhancing our services to provide recommendations for the users based on their preferences and most viewed content.
-We collect usage data periodicaly that helps by showing them relevant content, and enables us to fine tune the application based on how our users actually use it.
+We collect usage data periodicaly that enables us to fine-tune the application based on how our users actually use it.
+In addition to our reports we must comply to security requirements.
+We must be able to tell who was able to access certain reports at a given point in time, what changes were made in the application by whom in a certain time range.
+We collect so called audit logs to be able to extract these information.
+This data must be handled with care and only people with higher privileges shall have access to the actual data.
+
+In a recent project we needed to extract anonimized audit log information to an external place out of our postgreSQL to let a team of content managers access that data quickly.
 
 ## What We Need
 
-We need to have analytics about the usage to present to the report creators.
-The report creators often want to know the peak periods of their reports and see what users made the most changes in certain timeframes in reports that are modifiable.
+We need to have information about the usage distribution to present them to the creators of the reports inside the BI tools. We can show them detailed information on how their content is accessed through our application. Different tools might already collect and show usage data analytisc, but this way we can show it in a unified manner.
+Since the report creators often want to know the peak periods of their reports.
 
 We need to have audit information to see what reports were accessed by whom through our application.
-We have to make sure that no unauthorized modifications or access happened.
-If for any unfortunate reason it's possible, we have to know it immediately, in order to act as fast as possible to prevent further impact.
-
-We need to have access to the modification history and permissions of the documents.
-This way we can easily tell who made changes and who had access to these reports over some defined period of time.
-
-Last but not least, we need to know how effective were our recommendations.
-We need to see who viewed the recommended posts.
+The external sources manage their own permissions, we synchronize them over to be transparent, but even if those lists differ the BI tools won't let unauthorized access to their reports.
 
 ## How can we achieve it
 
@@ -41,12 +39,7 @@ We decided to use Algolia as the index, that our focus groups can use to compose
 ## Architecture
 
 Our backend service of the application is writen in [Golang](https://go.dev/).
-We have two kind of reports.
-
-- One of those are coming from external BI sources
-- The other kind of documents are editable inside our application
-
-Their metadata and the usage information are stored in a [PostgreSQL](https://www.postgresql.org/) database.
+We store the connection information and report metadata for the BI Tools and the usage information in a [PostgreSQL](https://www.postgresql.org/) database.
 
 We aim for a solution as close to the database as possible.
 We'd like to leverage the language features that postgreSQL provides us without any extensions.

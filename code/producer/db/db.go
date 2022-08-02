@@ -3,7 +3,6 @@ package db
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"os"
 
 	_ "github.com/lib/pq"
@@ -44,9 +43,9 @@ func (d *dbStruct) QueryRow(statement string, args ...interface{}) *sql.Row {
 }
 
 func (d *dbStruct) AddAuditLogEntry(actionID, userID, contentItemID int) (int, error) {
-	log.Printf("AddAuditLogEntry (userID: %v, contentItemID: %v, actionID: %v)",
-		actionID, userID, contentItemID,
-	)
+	// log.Printf("AddAuditLogEntry (userID: %v, contentItemID: %v, actionID: %v)",
+	// 	actionID, userID, contentItemID,
+	// )
 
 	var id int
 	err := d.db.QueryRow(sqlInsertLogRecord, actionID, userID, contentItemID).Scan(&id)

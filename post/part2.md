@@ -4,12 +4,16 @@
 
 In order to let our users access our audit data from an external location we need to send it to a place where they can access it. We're going to walk through the implementation details on how we achieve that.
 
+You can check out the [source code](https://github.com/algolia-samples/algolia-postgres-db/tree/master/code) on GitHub. You can try it out with a free-tier Algolia account, for the Installation Steps check out the [README](https://github.com/algolia-samples/algolia-postgres-db/blob/master/README.md) in the root of the GitHub repository.
+
+![Architcture diagram of the solution](./architecture.excalidraw.png)
+
 ## Implementation Details
 
 Let's dive into our solution in detail. Our demo follows a simple pattern.
 
 We create new audit log lines periodically with a single producer,
- and read these new lines with multiple data consumers.
+and read these new lines with multiple data consumers.
 
 For the sake of simplicity we've created a minimal example for the services.
 
@@ -22,7 +26,7 @@ This example does not reflect our real codebase, but gives you an idea of how it
 
 ## Getting started
 
-Let's go through again what you need to get started as we [did in the earlier post](./part2.md).
+Let's go through what you need get started as seen in the repository [README](https://github.com/algolia-samples/algolia-postgres-db/blob/master/README.md).
 
 All components and depenencies are described in the `docker-compose.yml` file.
 
@@ -161,7 +165,7 @@ We generate identifiers with `generate_series` between the configurable ranges f
 
 In order to select only the given number of items we add an upper bound of the resultset with `limit`.
 
-To make the code better separated the different logical components are defined in their own [Common Table Expressions](https://www.postgresql.org/docs/current/queries-with.html) aka. CTE-s defined by `with` queries.
+To make the code better separated, the different logical components are defined in their own [Common Table Expressions](https://www.postgresql.org/docs/current/queries-with.html) aka. CTE-s defined by `with` queries.
 
 In the `limited_data` CTE we join together all generated lines for the different data types and shuffle them before limiting the results.
 
@@ -239,3 +243,16 @@ The `skip locked` part will ignore lines that other coonsumers might have locked
 - The `limit $1` line makes sure that we only select a subset of lines from the queue.
 - The `returning` declaration lets us get the data of each seleted line.
 - In the update statement we set the `set _visited = true` only from the lines that are currently unvisited by `where _visited = false`. It's a saffety measure, in theory we shall never have `_visited = true` outside a transaction. This could be further simplified by deleting these lines inside the transaction.
+
+## Usage
+
+With the data in Algolia our analytics team can write custom queries to search for the data they're interested in.
+
+```json
+{
+  "filters": "createDateTimestamp > 1655127131 AND userId=12 AND action=2"
+}
+```
+
+It searches or all actions with an ID:2 by user:12 that were added AFTER 1655127131 (Monday, June 13, 2022 1:32:11 PM).
+The [epochconverter](https://www.epochconverter.com/) is a handy tool to convert between timestamps and date.

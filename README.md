@@ -120,5 +120,3 @@ You can even run custom queries like this:
 
 It searches or all actions with an ID:2 by user:12 that were added AFTER 1655127131 (Monday, June 13, 2022 1:32:11 PM).
 The [epochconverter](https://www.epochconverter.com/) is a handy tool to convert between timestamps and date.
-
-> We're going to deep dive into our simplified implementation in the [next part](./part3.md).

@@ -2,7 +2,11 @@
 
 > This post is a follow-up on [how we index](./part1.md) our data with Algolia.
 
+In this post we're going to walk through a simplified implementation of our search index solution.
+
 In order to let our users access our audit data from an external location we need to send it to a place where they can access it. We're going to walk through the implementation details on how we achieve that.
+
+To mimic anonimized data we're going to use random generated number ids and we'r going to focus on the structure and omit JSON data type from the example.
 
 You can check out the [source code](https://github.com/algolia-samples/algolia-postgres-db/tree/master/code) on GitHub. You can try it out with a free-tier Algolia account, for the Installation Steps check out the [README](https://github.com/algolia-samples/algolia-postgres-db/blob/master/README.md) in the root of the GitHub repository.
 

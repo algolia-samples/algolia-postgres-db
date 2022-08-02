@@ -21,7 +21,7 @@ We collect so called audit logs to be able to extract these information.
 This data must be handled with care and only people with higher privileges shall have access to the raw data.
 
 In a recent project we needed to develop an optional extension to extract anonimized audit log information into an external place out of our postgreSQL to let a team of content managers access that data quickly.
-These audit logs contain JSON metadata, it is hard to set up advanced search features in them with postgres, it's better to index that data to speed up the queries.
+These audit logs can contain JSON metadata, it is hard to set up advanced search features in them with postgres, it's better to index that data to speed up the queries.
 
 ## What We Need
 

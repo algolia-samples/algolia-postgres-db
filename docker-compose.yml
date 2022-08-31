@@ -1,0 +1,59 @@
+version: '2'
+services:
+  db:
+    container_name: algolia-postgres
+    image: "postgres:14"
+    ports:
+    # NOTE: change 25432 to any value you wish
+      - "25432:5432"
+    # logging:
+    #   driver: "none" # disable logging
+    environment:
+      - PGUSER=$POSTGRES_USER # otherwise misleadingg: FATAL: role "root" does not exist
+      - POSTGRES_DB=$POSTGRES_DB
+      - POSTGRES_USER=$POSTGRES_USER
+      - POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+      - POSTGRES_HOST_AUTH_METHOD=trust
+    volumes:
+      - ./code/postgres/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d:ro
+      # - db:/var/lib/postgresql # TODO: use named volumes instead
+      - ./code/postgres/db:/var/lib/postgresql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  producer:
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DB_HOST=$DB_HOST
+      - POSTGRES_DB=$POSTGRES_DB
+      - POSTGRES_USER=$POSTGRES_USER
+      - POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+      - DELAY_SEC=$DELAY_PRODUCER
+    build:
+      dockerfile: Dockerfile
+      context: ./code/producer
+  consumer:
+    scale: 2
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - ALGOLIA_APP_ID=$ALGOLIA_APP_ID
+      - ALGOLIA_INDEX_NAME=$ALGOLIA_INDEX_NAME
+      - ALGOLIA_API_KEY=$ALGOLIA_API_KEY
+      - DB_HOST=$DB_HOST
+      - POSTGRES_DB=$POSTGRES_DB
+      - POSTGRES_USER=$POSTGRES_USER
+      - POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+      - DELAY_SEC=$DELAY_CONSUMER
+      - BATCH_SIZE=$BATCH_SIZE
+    build:
+      dockerfile: Dockerfile
+      context: ./code/consumer
+
+# volumes:
+#   db:
